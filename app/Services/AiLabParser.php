@@ -117,12 +117,22 @@ SISTEMA INTELIGENTE DE RECONHECIMENTO:
 - SEMPRE normalize códigos: MAIÚSCULAS, use _ ao invés de espaços
 - SEMPRE inclua TODOS os parâmetros encontrados no PDF, mesmo que não estejam na lista
 
-EXTRAÇÃO DO NOME DO LABORATÓRIO:
-- O nome do laboratório geralmente aparece no CABEÇALHO ou TOPO do PDF
-- Procure por nomes como: "Laboratório", "Lab", nome da clínica/hospital
-- Exemplos comuns: "Lab Max", "LabMax", "LABMAX" , "Bioprev", "BIOPREV", "Lab São Francisco", "Biofox", "Fleury", "Delboni", "Santa Casa", "Laboratório Central", "Laboratório BIOPREV"
-- Se não encontrar explicitamente, tente inferir pela assinatura ou rodapé
-- Se realmente não encontrar, use "Laboratório Desconhecido"
+EXTRAÇÃO DO NOME DO LABORATÓRIO (MUITO IMPORTANTE):
+- O nome do laboratório geralmente aparece no CABEÇALHO, TOPO ou RODAPÉ do PDF
+- Procure nas primeiras linhas do documento e também no final
+- Busque por palavras-chave: "Laboratório", "Lab", "LAB", nome da clínica/hospital
+- LABORATÓRIOS CONHECIDOS (dê prioridade para esses nomes exatos):
+  * "LabMax" ou "Lab Max" ou "LABMAX"
+  * "Bioprev" ou "BIOPREV" ou "BIO PREV"
+  * "Laboratório São Miguel" ou "Lab São Miguel" ou "SÃO MIGUEL"
+  * "Laboratório Pronto Análise" ou "Pronto Análise" ou "PRONTO ANALISE"
+- Outros laboratórios comuns: "Fleury", "Delboni", "Santa Casa", "Laboratório Central", "Biofox", "Hermes Pardini"
+- NORMALIZE o nome:
+  * Se encontrar variações (ex: "LABMAX", "Lab Max"), use a forma normalizada "LabMax"
+  * Se encontrar "BIOPREV" ou "BIO PREV", use "Bioprev"
+  * Mantenha capitalização correta
+- Se não encontrar explicitamente, procure em logos, assinaturas, cabeçalhos, rodapés, endereços
+- ATENÇÃO: Se NÃO conseguir identificar com certeza, use EXATAMENTE "Laboratório Desconhecido"
 
 IMPORTANTE:
 - Retorne APENAS o JSON, sem texto adicional

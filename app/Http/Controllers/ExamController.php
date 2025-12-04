@@ -69,9 +69,29 @@ class ExamController extends Controller
             'results.examParameter',
         ]);
 
+        $laboratories = Laboratory::where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
         return Inertia::render('exams/show', [
             'exam' => $exam,
+            'laboratories' => $laboratories,
         ]);
+    }
+
+    public function updateLaboratory(Request $request, Exam $exam)
+    {
+        $this->authorize('update', $exam);
+
+        $validated = $request->validate([
+            'laboratory_id' => 'required|exists:laboratories,id',
+        ]);
+
+        $exam->update([
+            'laboratory_id' => $validated['laboratory_id'],
+        ]);
+
+        return back()->with('success', 'Laboratório atualizado com sucesso!');
     }
 
     public function destroy(Exam $exam)

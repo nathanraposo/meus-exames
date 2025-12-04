@@ -70,8 +70,8 @@ class ExamProcessingService
 
     protected function findOrCreateLaboratory(string $laboratoryName): Laboratory
     {
-        // Normaliza o nome para buscar (remove espaços extras, case-insensitive)
-        $normalizedName = trim($laboratoryName);
+        // Normaliza o nome para buscar (remove espaços extras)
+        $normalizedName = $this->normalizeLaboratoryName(trim($laboratoryName));
 
         // Busca laboratório existente (case-insensitive)
         $laboratory = Laboratory::whereRaw('LOWER(name) = ?', [strtolower($normalizedName)])
@@ -97,6 +97,34 @@ class ExamProcessingService
         ]);
 
         return $laboratory;
+    }
+
+    protected function normalizeLaboratoryName(string $name): string
+    {
+        // Mapa de variações conhecidas para nomes padronizados
+        $knownLabs = [
+            'labmax' => 'LabMax',
+            'lab max' => 'LabMax',
+            'bioprev' => 'Bioprev',
+            'bio prev' => 'Bioprev',
+            'laboratório são miguel' => 'Laboratório São Miguel',
+            'lab são miguel' => 'Laboratório São Miguel',
+            'são miguel' => 'Laboratório São Miguel',
+            'laboratório pronto análise' => 'Laboratório Pronto Análise',
+            'pronto análise' => 'Laboratório Pronto Análise',
+            'pronto analise' => 'Laboratório Pronto Análise',
+            'laboratório desconhecido' => 'Laboratório Desconhecido',
+        ];
+
+        $nameLower = mb_strtolower($name);
+
+        // Se encontrar uma variação conhecida, retorna o nome normalizado
+        if (isset($knownLabs[$nameLower])) {
+            return $knownLabs[$nameLower];
+        }
+
+        // Se não encontrar, retorna o nome original
+        return $name;
     }
 
     protected function createExam(User $user, Laboratory $laboratory, array $data, string $filePath): Exam

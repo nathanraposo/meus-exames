@@ -106,8 +106,15 @@ export default function Dashboard({ stats, recentExams = [], abnormalResults = [
                             <div className="space-y-3">
                                 {recentExams.map((exam) => (
                                     <div key={exam.id} className="flex items-center justify-between rounded-md border p-3">
-                                        <div>
-                                            <p className="font-medium">{exam.title}</p>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-medium">{exam.title}</p>
+                                                {exam.laboratory.name === 'Laboratório Desconhecido' && (
+                                                    <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                                        ⚠️
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-sm text-muted-foreground">
                                                 {exam.user.name}
                                             </p>

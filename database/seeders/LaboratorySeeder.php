@@ -11,6 +11,18 @@ class LaboratorySeeder extends Seeder
     {
         $laboratories = [
             [
+                'name' => 'Laboratório Desconhecido',
+                'cnpj' => null,
+                'email' => null,
+                'phone' => null,
+                'address' => null,
+                'city' => null,
+                'state' => null,
+                'zip_code' => null,
+                'website' => null,
+                'active' => true,
+            ],
+            [
                 'name' => 'LabMax',
                 'cnpj' => null,
                 'email' => 'contato@labmax.com.br',
@@ -23,31 +35,31 @@ class LaboratorySeeder extends Seeder
                 'active' => true,
             ],
             [
-                'name' => 'Laboratório Central SUS',
+                'name' => 'Bioprev',
                 'cnpj' => null,
-                'email' => 'central@sus.gov.br',
-                'phone' => '(44) 9876-5432',
-                'address' => 'Av. Principal, 456',
-                'city' => 'Umuarama',
-                'state' => 'PR',
-                'zip_code' => '87500-100',
+                'email' => 'contato@bioprev.com.br',
+                'phone' => null,
+                'address' => null,
+                'city' => null,
+                'state' => null,
+                'zip_code' => null,
                 'website' => null,
                 'active' => true,
             ],
             [
-                'name' => 'Lab Santa Casa',
+                'name' => 'Laboratório São Miguel',
                 'cnpj' => null,
-                'email' => 'lab@santacasa.org.br',
-                'phone' => '(44) 5555-1234',
-                'address' => 'Rua Hospital, 789',
-                'city' => 'Umuarama',
-                'state' => 'PR',
-                'zip_code' => '87500-200',
-                'website' => 'https://santacasa.org.br',
+                'email' => null,
+                'phone' => null,
+                'address' => null,
+                'city' => null,
+                'state' => null,
+                'zip_code' => null,
+                'website' => null,
                 'active' => true,
             ],
             [
-                'name' => 'Outro Laboratório',
+                'name' => 'Laboratório Pronto Análise',
                 'cnpj' => null,
                 'email' => null,
                 'phone' => null,
@@ -61,7 +73,10 @@ class LaboratorySeeder extends Seeder
         ];
 
         foreach ($laboratories as $laboratory) {
-            Laboratory::create($laboratory);
+            Laboratory::firstOrCreate(
+                ['name' => $laboratory['name']],
+                $laboratory
+            );
         }
     }
 }

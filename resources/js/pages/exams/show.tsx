@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import axios from '@/lib/axios';
 import ParameterHistoryChart from '@/components/charts/parameter-history-chart';
@@ -55,8 +55,14 @@ interface Exam {
     results: ExamResult[];
 }
 
+interface Laboratory {
+    id: number;
+    name: string;
+}
+
 interface Props {
     exam: Exam;
+    laboratories: Laboratory[];
 }
 
 interface HistoryDataPoint {
@@ -73,7 +79,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Detalhes', href: '#' },
 ];
 
-export default function ShowExam({ exam }: Props) {
+export default function ShowExam({ exam, laboratories }: Props) {
     const [expandedParameter, setExpandedParameter] = useState<string | null>(null);
     const [historyData, setHistoryData] = useState<Record<string, HistoryDataPoint[]>>({});
     const [loadingHistory, setLoadingHistory] = useState<Record<string, boolean>>({});
@@ -81,6 +87,11 @@ export default function ShowExam({ exam }: Props) {
     // Filtros
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+
+    // Edição de laboratório
+    const [isEditingLab, setIsEditingLab] = useState(false);
+    const [selectedLabId, setSelectedLabId] = useState(exam.laboratory.id);
+    const [isUpdatingLab, setIsUpdatingLab] = useState(false);
 
     const getStatusBadge = (status: string) => {
         const colors = {
@@ -138,6 +149,29 @@ export default function ShowExam({ exam }: Props) {
         }
     };
 
+    const handleUpdateLaboratory = () => {
+        if (selectedLabId === exam.laboratory.id) {
+            setIsEditingLab(false);
+            return;
+        }
+
+        setIsUpdatingLab(true);
+        router.patch(
+            `/exams/${exam.id}/laboratory`,
+            { laboratory_id: selectedLabId },
+            {
+                onSuccess: () => {
+                    setIsEditingLab(false);
+                    setIsUpdatingLab(false);
+                },
+                onError: () => {
+                    setIsUpdatingLab(false);
+                    alert('Erro ao atualizar laboratório');
+                },
+            }
+        );
+    };
+
     // Filtra os resultados
     const filteredResults = exam.results.filter(result => {
         const matchesSearch = result.exam_parameter.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -168,7 +202,54 @@ export default function ShowExam({ exam }: Props) {
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Laboratório</p>
-                            <p className="font-medium">{exam.laboratory.name}</p>
+                            {isEditingLab ? (
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        value={selectedLabId}
+                                        onChange={(e) => setSelectedLabId(Number(e.target.value))}
+                                        className="rounded-md border bg-background px-2 py-1 text-sm"
+                                        disabled={isUpdatingLab}
+                                    >
+                                        {laboratories.map((lab) => (
+                                            <option key={lab.id} value={lab.id}>
+                                                {lab.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={handleUpdateLaboratory}
+                                        disabled={isUpdatingLab}
+                                        className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                    >
+                                        {isUpdatingLab ? 'Salvando...' : 'Salvar'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsEditingLab(false);
+                                            setSelectedLabId(exam.laboratory.id);
+                                        }}
+                                        disabled={isUpdatingLab}
+                                        className="rounded-md border px-3 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <p className="font-medium">{exam.laboratory.name}</p>
+                                    {exam.laboratory.name === 'Laboratório Desconhecido' && (
+                                        <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                            ⚠️ Corrigir
+                                        </span>
+                                    )}
+                                    <button
+                                        onClick={() => setIsEditingLab(true)}
+                                        className="text-xs text-primary hover:underline"
+                                    >
+                                        Editar
+                                    </button>
+                                </div>
+                            )}
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Data da Coleta</p>

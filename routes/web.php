@@ -15,9 +15,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('abnormal-results', [\App\Http\Controllers\DashboardController::class, 'abnormalResults'])->name('abnormal-results');
     Route::get('all-parameters', [\App\Http\Controllers\DashboardController::class, 'allParameters'])->name('all-parameters');
 
-    // Rota específica ANTES do resource para evitar conflito
+    // Rotas específicas ANTES do resource para evitar conflito
     Route::get('exams/history/{parameterCode}', [\App\Http\Controllers\ExamController::class, 'history'])
         ->name('exams.history');
+    Route::patch('exams/{exam}/laboratory', [\App\Http\Controllers\ExamController::class, 'updateLaboratory'])
+        ->name('exams.updateLaboratory');
 
     Route::resource('exams', \App\Http\Controllers\ExamController::class);
 });

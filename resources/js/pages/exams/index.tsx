@@ -100,8 +100,15 @@ export default function ExamsIndex({ exams }: Props) {
                                 <tbody>
                                     {exams.map((exam) => (
                                         <tr key={exam.id} className="border-b hover:bg-muted/50">
-                                            <td className="p-4 text-sm font-medium">
-                                                {exam.title}
+                                            <td className="p-4 text-sm">
+                                                <div>
+                                                    <p className="font-medium">{exam.title}</p>
+                                                    {exam.laboratory.name === 'Laboratório Desconhecido' && (
+                                                        <span className="mt-1 inline-block rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                                            ⚠️ Laboratório Desconhecido
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="p-4 text-sm">
                                                 {exam.protocol_number || '-'}
