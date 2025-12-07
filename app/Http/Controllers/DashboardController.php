@@ -29,8 +29,22 @@ class DashboardController extends Controller
         $totalExams = $query->count();
         $examsThisMonth = (clone $query)->whereMonth('collection_date', now()->month)->count();
 
-        $abnormalCount = ExamResult::whereIn('exam_id', $query->pluck('id'))
-            ->whereIn('status', ['low', 'high', 'critical'])
+        // Conta apenas parâmetros cujo ÚLTIMO resultado está anormal
+        $examIds = $query->pluck('id');
+        $abnormalCount = ExamResult::with(['exam'])
+            ->whereIn('exam_id', $examIds)
+            ->get()
+            ->groupBy('exam_parameter_id')
+            ->map(function ($results) {
+                // Para cada parâmetro, pega o resultado do ÚLTIMO EXAME
+                return $results->sortByDesc(function ($result) {
+                    return $result->exam->collection_date;
+                })->first();
+            })
+            // Filtra: só conta se o último exame estiver anormal
+            ->filter(function ($result) {
+                return in_array($result->status, ['low', 'high', 'critical']);
+            })
             ->count();
 
         return [
@@ -124,7 +138,10 @@ class DashboardController extends Controller
         $allParameters = ExamResult::with(['exam.laboratory', 'examParameter'])
             ->whereIn('exam_id', $examIds)
             ->get()
-            ->groupBy('exam_parameter_id')
+            // Agrupa por código do parâmetro em vez de ID (evita duplicatas)
+            ->groupBy(function ($result) {
+                return $result->examParameter->code;
+            })
             ->map(function ($results) {
                 // Para cada parâmetro, pega o resultado do ÚLTIMO EXAME (data mais recente)
                 $latestResult = $results->sortByDesc(function ($result) {
@@ -141,12 +158,21 @@ class DashboardController extends Controller
                     'status' => $latestResult->status,
                     'reference_min' => $latestResult->reference_min,
                     'reference_max' => $latestResult->reference_max,
+                    'reference_type' => $latestResult->reference_type,
+                    'reference_categories' => $latestResult->reference_categories,
+                    'reference_description' => $latestResult->reference_description,
                     'exam_date' => $latestResult->exam->collection_date->format('d/m/Y'),
                     'laboratory_name' => $latestResult->exam->laboratory->name,
-                    'total_exams' => $results->count(),
+                    'total_exams' => $results->pluck('exam_id')->unique()->count(),
                 ];
             })
-            ->sortBy('parameter_name') // Ordena alfabeticamente
+            // Ordena alfabeticamente (normaliza acentuação para ordenação correta)
+            ->sort(function ($a, $b) {
+                // Remove acentos e converte para minúsculo para comparação
+                $nameA = iconv('UTF-8', 'ASCII//TRANSLIT', $a['parameter_name']);
+                $nameB = iconv('UTF-8', 'ASCII//TRANSLIT', $b['parameter_name']);
+                return strcasecmp($nameA, $nameB);
+            })
             ->values();
 
         return Inertia::render('all-parameters', [

@@ -15,6 +15,13 @@ class ExamResult extends Model
         'boolean_value',
         'reference_min',
         'reference_max',
+        'reference_gender',
+        'reference_age_min',
+        'reference_age_max',
+        'reference_condition',
+        'reference_description',
+        'reference_categories',
+        'reference_type',
         'status',
         'observation',
     ];
@@ -24,6 +31,7 @@ class ExamResult extends Model
         'reference_min' => 'decimal:4',
         'reference_max' => 'decimal:4',
         'boolean_value' => 'boolean',
+        'reference_categories' => 'array',
     ];
 
     public function exam(): BelongsTo

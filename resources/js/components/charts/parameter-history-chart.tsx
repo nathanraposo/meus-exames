@@ -1,5 +1,11 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 
+interface ReferenceCategory {
+    name: string;
+    min: number | null | string;
+    max: number | null | string;
+}
+
 interface HistoryDataPoint {
     date: string;
     value: number;
@@ -7,6 +13,9 @@ interface HistoryDataPoint {
     status: string;
     reference_min: number | null;
     reference_max: number | null;
+    reference_type: string;
+    reference_categories: ReferenceCategory[] | null;
+    reference_description: string | null;
 }
 
 interface ParameterHistoryChartProps {
@@ -34,7 +43,11 @@ export default function ParameterHistoryChart({ data, parameterName }: Parameter
         fullDate: new Date(point.date).toLocaleDateString('pt-BR'),
     }));
 
-    // Pega valores de referência (usa o primeiro ponto que tenha) com 2 casas decimais
+    // Pega valores de referência do exame mais recente (ou primeiro que tenha categorias)
+    const pointWithCategories = data.find(d => d.reference_type === 'categorical' && d.reference_categories) || data[data.length - 1] || data[0];
+    const referenceType = pointWithCategories?.reference_type || 'numeric';
+    const referenceCategories = pointWithCategories?.reference_categories;
+    const referenceDescription = pointWithCategories?.reference_description;
     const referenceMin = data.find(d => d.reference_min !== null)?.reference_min;
     const referenceMax = data.find(d => d.reference_max !== null)?.reference_max;
     const refMinFormatted = referenceMin !== null && referenceMin !== undefined ? Number(referenceMin).toFixed(2) : '?';
@@ -56,10 +69,11 @@ export default function ParameterHistoryChart({ data, parameterName }: Parameter
             <text
                 x={x}
                 y={y - 10}
-                fill="hsl(var(--foreground))"
+                fill="currentColor"
                 textAnchor="middle"
                 fontSize={11}
                 fontWeight={600}
+                className="fill-foreground"
             >
                 {Number(value).toFixed(2)}
             </text>
@@ -133,16 +147,63 @@ export default function ParameterHistoryChart({ data, parameterName }: Parameter
                 </ResponsiveContainer>
 
                 {/* Legenda de referência */}
-                {(referenceMin !== null || referenceMax !== null) && (
-                    <div className="mt-4 flex items-center justify-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                            <div className="h-3 w-12 border-t-2 border-dashed border-red-500"></div>
-                            <span>
-                                Intervalo de referência: {refMinFormatted} - {refMaxFormatted} {unit}
-                            </span>
+                {referenceType === 'categorical' && referenceCategories ? (
+                    <div className="mt-4 space-y-3">
+                        <div className="rounded-lg border bg-muted/30 p-3">
+                            <p className="mb-2 text-center text-xs font-semibold">Faixas de Referência:</p>
+                            <div className="grid gap-2">
+                                {referenceCategories.map((cat, index) => {
+                                    const minValue = cat.min !== null && cat.min !== '' && cat.min !== undefined ? Number(cat.min) : null;
+                                    const maxValue = cat.max !== null && cat.max !== '' && cat.max !== undefined ? Number(cat.max) : null;
+
+                                    return (
+                                        <div key={index} className="text-center text-xs">
+                                            <span className="font-medium">{cat.name}:</span>{' '}
+                                            {minValue !== null && maxValue !== null
+                                                ? `${minValue} - ${maxValue} ${unit}`
+                                                : minValue !== null
+                                                  ? `≥ ${minValue} ${unit}`
+                                                  : maxValue !== null
+                                                    ? `< ${maxValue} ${unit}`
+                                                    : '-'}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {referenceDescription && (
+                                <p className="mt-2 text-center text-xs italic text-muted-foreground">
+                                    {referenceDescription}
+                                </p>
+                            )}
                         </div>
+                        {(referenceMin !== null || referenceMax !== null) && (
+                            <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-3 w-12 border-t-2 border-dashed border-red-500"></div>
+                                    <span>
+                                        Intervalo de referência: {refMinFormatted} - {refMaxFormatted} {unit}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                )}
+                ) : (referenceMin !== null || referenceMax !== null) ? (
+                    <div className="mt-4 space-y-2">
+                        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                                <div className="h-3 w-12 border-t-2 border-dashed border-red-500"></div>
+                                <span>
+                                    Intervalo de referência: {refMinFormatted} - {refMaxFormatted} {unit}
+                                </span>
+                            </div>
+                        </div>
+                        {referenceDescription && (
+                            <p className="text-center text-xs italic text-muted-foreground">
+                                {referenceDescription}
+                            </p>
+                        )}
+                    </div>
+                ) : null}
 
                 {/* Legenda de cores */}
                 <div className="mt-4 flex items-center justify-center gap-6 text-xs">

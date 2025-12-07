@@ -1,13 +1,13 @@
 <?php
 
-namespace Database\Seeders;
-
-use Illuminate\Database\Seeder;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use App\Models\Laboratory;
 
-class LaboratorySeeder extends Seeder
+return new class extends Migration
 {
-    public function run(): void
+    public function up(): void
     {
         $laboratories = [
             [
@@ -71,7 +71,7 @@ class LaboratorySeeder extends Seeder
                 'active' => true,
             ],
             [
-                'name' => 'Laboratório São Francisco',
+                'name' => 'São Francisco Lab',
                 'cnpj' => null,
                 'email' => null,
                 'phone' => null,
@@ -91,4 +91,16 @@ class LaboratorySeeder extends Seeder
             );
         }
     }
-}
+
+    public function down(): void
+    {
+        Laboratory::whereIn('name', [
+            'Laboratório Desconhecido',
+            'LabMax',
+            'Bioprev',
+            'Laboratório São Miguel',
+            'Laboratório Pronto Análise',
+            'São Francisco Lab',
+        ])->delete();
+    }
+};

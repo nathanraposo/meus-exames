@@ -82,14 +82,183 @@ Extraia TODOS os dados do exame de sangue de TODAS AS PÁGINAS e retorne em form
           "parameter_name": "Hemoglobina ou Colesterol HDL etc",
           "value": 14.5,
           "unit": "g/dL",
-          "reference_min": 12.0,
-          "reference_max": 16.0,
-          "status": "normal ou low ou high"
+          "reference_ranges": [
+            {
+              "gender": "both ou male ou female",
+              "age_min": 18,
+              "age_max": 90,
+              "age_description": "Adultos 18 a 90 anos",
+              "reference_min": 12.0,
+              "reference_max": 16.0,
+              "reference_type": "numeric",
+              "condition": null,
+              "reference_categories": null
+            }
+          ]
         }
       ]
     }
   ]
 }
+
+EXTRAÇÃO DE VALORES DE REFERÊNCIA (MUITO IMPORTANTE):
+
+Os valores de referência podem ser apresentados de várias formas no PDF. Você DEVE extrair TODAS as variações:
+
+1. REFERÊNCIA SIMPLES (para todos):
+   Exemplo: "POTÁSSIO: 3,5 a 5,5 mEq/L"
+   JSON:
+   "reference_ranges": [
+     {
+       "gender": "both",
+       "age_min": null,
+       "age_max": null,
+       "age_description": null,
+       "reference_min": 3.5,
+       "reference_max": 5.5,
+       "reference_type": "numeric",
+       "condition": null,
+       "reference_categories": null
+     }
+   ]
+
+2. REFERÊNCIA POR GÊNERO:
+   Exemplo: "FERRO - Homem: 70 a 180 µg/dL / Mulher: 60 a 180 µg/dL"
+   JSON:
+   "reference_ranges": [
+     {
+       "gender": "male",
+       "age_min": null,
+       "age_max": null,
+       "age_description": "Homem",
+       "reference_min": 70.0,
+       "reference_max": 180.0,
+       "reference_type": "numeric",
+       "condition": null,
+       "reference_categories": null
+     },
+     {
+       "gender": "female",
+       "age_min": null,
+       "age_max": null,
+       "age_description": "Mulher",
+       "reference_min": 60.0,
+       "reference_max": 180.0,
+       "reference_type": "numeric",
+       "condition": null,
+       "reference_categories": null
+     }
+   ]
+
+3. REFERÊNCIA POR IDADE:
+   Exemplo: "CREATININA - 18 a 90 anos: 0,70 a 1,30 mg/dL"
+   JSON:
+   "reference_ranges": [
+     {
+       "gender": "both",
+       "age_min": 18,
+       "age_max": 90,
+       "age_description": "18 a 90 anos",
+       "reference_min": 0.70,
+       "reference_max": 1.30,
+       "reference_type": "numeric",
+       "condition": null,
+       "reference_categories": null
+     }
+   ]
+
+4. REFERÊNCIA POR GÊNERO + IDADE:
+   Exemplo: "TESTOSTERONA - Homens 18 a 66 anos: 175,00 a 781,00 ng/dL / Mulheres 21 a 73 anos: 10,00 a 75,00 ng/dL"
+   JSON:
+   "reference_ranges": [
+     {
+       "gender": "male",
+       "age_min": 18,
+       "age_max": 66,
+       "age_description": "Homens 18 a 66 anos",
+       "reference_min": 175.00,
+       "reference_max": 781.00,
+       "reference_type": "numeric",
+       "condition": null,
+       "reference_categories": null
+     },
+     {
+       "gender": "female",
+       "age_min": 21,
+       "age_max": 73,
+       "age_description": "Mulheres 21 a 73 anos",
+       "reference_min": 10.00,
+       "reference_max": 75.00,
+       "reference_type": "numeric",
+       "condition": null,
+       "reference_categories": null
+     }
+   ]
+
+5. REFERÊNCIA CATEGÓRICA (faixas nomeadas):
+   Exemplo: "COLESTEROL TOTAL - Desejável: < 200 mg/dL / Limítrofe: 200 a 239 mg/dL / Alto: >= 240 mg/dL"
+   JSON:
+   "reference_ranges": [
+     {
+       "gender": "both",
+       "age_min": null,
+       "age_max": null,
+       "age_description": null,
+       "reference_min": null,
+       "reference_max": null,
+       "reference_type": "categorical",
+       "condition": null,
+       "reference_categories": [
+         {"name": "Desejável", "min": null, "max": 200},
+         {"name": "Limítrofe", "min": 200, "max": 239},
+         {"name": "Alto", "min": 240, "max": null}
+       ]
+     }
+   ]
+
+6. REFERÊNCIA POR CONDIÇÃO (jejum/sem jejum):
+   Exemplo: "GLICOSE - Jejum: 70 a 99 mg/dL / Sem jejum: < 140 mg/dL"
+   JSON:
+   "reference_ranges": [
+     {
+       "gender": "both",
+       "age_min": null,
+       "age_max": null,
+       "age_description": null,
+       "reference_min": 70.0,
+       "reference_max": 99.0,
+       "reference_type": "numeric",
+       "condition": "jejum",
+       "reference_categories": null
+     },
+     {
+       "gender": "both",
+       "age_min": null,
+       "age_max": null,
+       "age_description": null,
+       "reference_min": null,
+       "reference_max": 140.0,
+       "reference_type": "numeric",
+       "condition": "sem_jejum",
+       "reference_categories": null
+     }
+   ]
+
+PALAVRAS-CHAVE PARA IDENTIFICAR PADRÕES:
+- Gênero: "Homem", "Mulher", "Masculino", "Feminino", "Homens", "Mulheres", "M:", "F:"
+- Idade: "anos", "a", "de X a Y anos", "adultos", "crianças", "até X anos"
+- Condição: "jejum", "sem jejum", "em jejum", "pós-prandial", "aleatório"
+- Categorias: "Desejável", "Alto", "Baixo", "Normal", "Elevado", "Limítrofe", "Ótimo", "Bom", "Ruim"
+- Operadores: "<", ">", "<=", ">=", "até", "acima de", "abaixo de", "a"
+
+REGRAS IMPORTANTES:
+- Se houver MÚLTIPLAS faixas de referência no PDF, extraia TODAS em reference_ranges[]
+- Se houver apenas UMA faixa simples, use gender: "both" e age_min/max: null
+- Normalize gênero: "male" ou "female" ou "both" (não use "M", "F", "Masculino", etc)
+- Normalize condições: "jejum" ou "sem_jejum" (minúsculas, sem espaços extras)
+- Para categorias, preserve os nomes exatos que aparecem no PDF
+- Se não conseguir determinar um valor, use null (não invente valores)
+- SEMPRE preencha reference_type: "numeric" ou "categorical"
 
 CÓDIGOS DE EXAMES CONHECIDOS (use preferencialmente):
 - HEMOGRAMA: Hemograma completo
@@ -137,6 +306,8 @@ EXTRAÇÃO DO NOME DO LABORATÓRIO (MUITO IMPORTANTE):
 IMPORTANTE:
 - Retorne APENAS o JSON, sem texto adicional
 - O campo laboratory_name é OBRIGATÓRIO - sempre extraia ou use "Laboratório Desconhecido"
+- SEMPRE use reference_ranges[] (array) - NUNCA use reference_min/reference_max diretamente no parâmetro
+- Cada parâmetro DEVE ter reference_ranges[] mesmo que seja apenas uma faixa simples
 - Se não encontrar um valor, use null
 - Converta datas para formato YYYY-MM-DD
 - Valores numéricos devem ser numbers, não strings
@@ -144,6 +315,7 @@ IMPORTANTE:
 - Seja inteligente: crie códigos para exames/parâmetros desconhecidos
 - PROCESSE TODAS AS PÁGINAS - não pare na primeira página!
 - Resultados podem estar espalhados em várias páginas - colete todos
+- EXTRAIA TODAS as variações de referência que encontrar (múltiplas entradas em reference_ranges[])
 
 PROMPT;
     }

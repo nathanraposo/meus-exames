@@ -5,6 +5,12 @@ import { useState } from 'react';
 import axios from '@/lib/axios';
 import ParameterHistoryChart from '@/components/charts/parameter-history-chart';
 
+interface ReferenceCategory {
+    name: string;
+    min: number | null | string;
+    max: number | null | string;
+}
+
 interface Parameter {
     id: number;
     exam_id: number;
@@ -15,6 +21,9 @@ interface Parameter {
     status: string;
     reference_min: number | null;
     reference_max: number | null;
+    reference_type: string | null;
+    reference_categories: ReferenceCategory[] | null;
+    reference_description: string | null;
     exam_date: string;
     laboratory_name: string;
     total_exams: number;
@@ -76,6 +85,56 @@ export default function AllParameters({ allParameters }: Props) {
         if (status === 'high') return '↑';
         if (status === 'critical') return '⚠';
         return '';
+    };
+
+    const getReferenceDisplay = (param: Parameter) => {
+        // Categórica
+        if (param.reference_type === 'categorical' && param.reference_categories) {
+            return (
+                <div className="space-y-1">
+                    {param.reference_categories.map((cat, index) => (
+                        <div key={index} className="text-xs">
+                            <span className="font-medium">{cat.name}:</span>{' '}
+                            {cat.min !== null && cat.max !== null
+                                ? `${cat.min} - ${cat.max}`
+                                : cat.min !== null
+                                  ? `≥ ${cat.min}`
+                                  : cat.max !== null
+                                    ? `< ${cat.max}`
+                                    : '-'}
+                        </div>
+                    ))}
+                    {param.reference_description && (
+                        <div className="text-xs italic text-muted-foreground">
+                            {param.reference_description}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Numérica
+        if (param.reference_min !== null || param.reference_max !== null) {
+            const refText =
+                param.reference_min !== null && param.reference_max !== null
+                    ? `${Number(param.reference_min).toFixed(2)} - ${Number(param.reference_max).toFixed(2)}`
+                    : param.reference_min !== null
+                      ? `≥ ${Number(param.reference_min).toFixed(2)}`
+                      : `< ${Number(param.reference_max).toFixed(2)}`;
+
+            return (
+                <div className="space-y-1">
+                    <div className="text-sm">{refText}</div>
+                    {param.reference_description && (
+                        <div className="text-xs italic text-muted-foreground">
+                            {param.reference_description}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        return <span className="text-muted-foreground">-</span>;
     };
 
     const toggleHistory = async (parameterCode: string) => {
@@ -214,9 +273,7 @@ export default function AllParameters({ allParameters }: Props) {
                                                     {!isNaN(Number(param.value)) ? Number(param.value).toFixed(2) : param.value} {param.unit}
                                                 </td>
                                                 <td className="p-4 text-sm text-muted-foreground">
-                                                    {param.reference_min !== null && param.reference_max !== null
-                                                        ? `${Number(param.reference_min).toFixed(2)} - ${Number(param.reference_max).toFixed(2)} ${param.unit}`
-                                                        : '-'}
+                                                    {getReferenceDisplay(param)}
                                                 </td>
                                                 <td className="p-4 text-sm">
                                                     <div className="flex items-center gap-2">

@@ -13,8 +13,9 @@ return new class extends Migration
     {
         Schema::create('exams', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('patient_id')->constrained()->onDelete('cascade');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('exam_type_id')->constrained()->onDelete('restrict');
+            $table->string('title')->nullable();
             $table->foreignId('laboratory_id')->constrained()->onDelete('restrict');
             $table->string('protocol_number')->unique()->nullable();
             $table->date('collection_date');
@@ -24,13 +25,15 @@ return new class extends Migration
             $table->enum('status', ['pending', 'collected', 'processing', 'completed', 'cancelled'])->default('pending');
             $table->text('notes')->nullable();
             $table->string('file_path')->nullable();
+            $table->longText('pdf_text')->nullable();
+            $table->json('ai_response')->nullable();
             $table->string('requesting_doctor')->nullable();
             $table->string('crm_doctor', 20)->nullable();
             $table->timestamps();
             $table->softDeletes();
 
             $table->index('protocol_number');
-            $table->index(['patient_id', 'collection_date']);
+            $table->index(['user_id', 'collection_date']);
             $table->index('status');
         });
     }

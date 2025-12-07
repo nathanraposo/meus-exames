@@ -9,6 +9,7 @@ use App\Models\ExamParameter;
 use App\Models\ExamResult;
 use App\Models\ReferenceValue;
 use App\Models\Laboratory;
+use App\Models\StandardReferenceRange;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
@@ -45,7 +46,7 @@ class ExamProcessingService
 
             $user = User::findOrFail($userId);
 
-            $exam = $this->createExam($user, $laboratory, $parsedData, $filePath);
+            $exam = $this->createExam($user, $laboratory, $parsedData, $filePath, $pdfText);
 
             $this->createResults($exam, $user, $parsedData);
 
@@ -66,6 +67,68 @@ class ExamProcessingService
 
             throw $e;
         }
+    }
+
+    /**
+     * Reprocessa um exame usando dados salvos (sem chamar API)
+     */
+    public function reprocessExamFromSavedData(Exam $exam): void
+    {
+        if (!$exam->ai_response) {
+            throw new \Exception('Exame não possui dados salvos (ai_response vazio)');
+        }
+
+        $parsedData = $exam->ai_response;
+        $user = $exam->user;
+
+        Log::info('Reprocessing exam from saved data', [
+            'exam_id' => $exam->id,
+            'user_id' => $user->id,
+        ]);
+
+        $this->createResults($exam, $user, $parsedData);
+
+        $exam->touch(); // Atualiza updated_at
+
+        Log::info('Exam reprocessed successfully', [
+            'exam_id' => $exam->id,
+            'results_count' => $exam->results()->count(),
+        ]);
+    }
+
+    /**
+     * Regenera o título do exame com um novo laboratório
+     */
+    public function regenerateExamTitle(Exam $exam, Laboratory $laboratory): string
+    {
+        // Coleta todos os tipos de exames únicos do exame
+        $examTypes = $exam->results()
+            ->with('examParameter.examType')
+            ->get()
+            ->pluck('examParameter.examType')
+            ->filter()
+            ->unique('id')
+            ->pluck('name')
+            ->values();
+
+        $examTypeCount = $examTypes->count();
+
+        // Monta a parte dos tipos de exames
+        if ($examTypeCount === 0) {
+            $examsPart = 'Exame';
+        } elseif ($examTypeCount === 1) {
+            $examsPart = $examTypes->first();
+        } elseif ($examTypeCount <= 3) {
+            $examsPart = $examTypes->join(' + ');
+        } else {
+            $examsPart = 'Exame Completo';
+        }
+
+        // Data de coleta formatada
+        $formattedDate = $exam->collection_date->format('d/m/Y');
+
+        // Monta o título: "Tipo(s) - Laboratório - Data"
+        return "{$examsPart} - {$laboratory->name} - {$formattedDate}";
     }
 
     protected function findOrCreateLaboratory(string $laboratoryName): Laboratory
@@ -127,7 +190,7 @@ class ExamProcessingService
         return $name;
     }
 
-    protected function createExam(User $user, Laboratory $laboratory, array $data, string $filePath): Exam
+    protected function createExam(User $user, Laboratory $laboratory, array $data, string $filePath, ?string $pdfText = null): Exam
     {
         $examTypeCode = $data['results'][0]['exam_type_code'] ?? 'HEMOGRAMA';
         $examType = ExamType::where('code', $examTypeCode)->first();
@@ -180,6 +243,8 @@ class ExamProcessingService
                 'status' => 'completed',
                 'notes' => null,
                 'file_path' => $filePath,
+                'pdf_text' => $pdfText,
+                'ai_response' => $data,
                 'requesting_doctor' => $data['requesting_doctor'] ?? null,
                 'crm_doctor' => $data['crm_doctor'] ?? null,
             ]
@@ -252,16 +317,43 @@ class ExamProcessingService
                     $parameter = $this->autoCreateParameter($examType, $paramData);
                 }
 
-                $referenceValue = ReferenceValue::where('exam_parameter_id', $parameter->id)
-                    ->forPatient($user)
-                    ->default()
-                    ->first();
+                // Select best reference range from AI data or database fallback
+                $selectedReference = $this->selectBestReference(
+                    $paramData,
+                    $user,
+                    $exam->laboratory_id
+                );
 
-                $refMin = $paramData['reference_min'] ?? $referenceValue?->min_value;
-                $refMax = $paramData['reference_max'] ?? $referenceValue?->max_value;
                 $value = $paramData['value'];
 
-                $status = $this->determineStatus($value, $refMin, $refMax);
+                // Para referências categóricas, encontrar a categoria onde o valor se encaixa
+                // e preencher reference_min/max com os limites dessa categoria específica
+                if ($selectedReference['reference_type'] === 'categorical' &&
+                    $selectedReference['reference_categories'] &&
+                    is_numeric($value)) {
+
+                    $applicableCategory = $this->findApplicableCategory(
+                        $value,
+                        $selectedReference['reference_categories']
+                    );
+
+                    if ($applicableCategory) {
+                        $selectedReference['reference_min'] = $applicableCategory['min'];
+                        $selectedReference['reference_max'] = $applicableCategory['max'];
+                    }
+                }
+
+                // Determine status based on reference type
+                $status = $this->determineStatus(
+                    $value,
+                    $selectedReference['reference_min'],
+                    $selectedReference['reference_max'],
+                    $selectedReference['reference_type'],
+                    $selectedReference['reference_categories']
+                );
+
+                // Normalize categories (convert empty strings to null)
+                $normalizedCategories = $this->normalizeCategories($selectedReference['reference_categories']);
 
                 ExamResult::create([
                     'exam_id' => $exam->id,
@@ -269,13 +361,181 @@ class ExamProcessingService
                     'numeric_value' => is_numeric($value) ? $value : null,
                     'text_value' => !is_numeric($value) ? $value : null,
                     'boolean_value' => null,
-                    'reference_min' => $refMin,
-                    'reference_max' => $refMax,
+                    'reference_min' => $selectedReference['reference_min'],
+                    'reference_max' => $selectedReference['reference_max'],
+                    'reference_gender' => $selectedReference['reference_gender'],
+                    'reference_age_min' => $selectedReference['reference_age_min'],
+                    'reference_age_max' => $selectedReference['reference_age_max'],
+                    'reference_condition' => $selectedReference['reference_condition'],
+                    'reference_description' => $selectedReference['reference_description'],
+                    'reference_categories' => $normalizedCategories,
+                    'reference_type' => $selectedReference['reference_type'],
                     'status' => $status,
                     'observation' => null,
                 ]);
             }
         }
+    }
+
+    /**
+     * Select the best reference range from AI data or database fallback
+     */
+    protected function selectBestReference(array $paramData, User $user, int $laboratoryId): array
+    {
+        $userGender = $user->gender; // 'male' or 'female'
+        $userAge = $user->age; // calculated from birth_date
+
+        // Check if AI extracted reference ranges
+        if (isset($paramData['reference_ranges']) && is_array($paramData['reference_ranges']) && count($paramData['reference_ranges']) > 0) {
+            Log::info('Using AI-extracted reference ranges', [
+                'parameter_code' => $paramData['parameter_code'],
+                'ranges_count' => count($paramData['reference_ranges']),
+                'raw_ranges' => json_encode($paramData['reference_ranges']),
+            ]);
+
+            return $this->selectFromAiRanges($paramData['reference_ranges'], $userGender, $userAge);
+        }
+
+        // Fallback to database
+        Log::info('Falling back to database reference ranges', [
+            'parameter_code' => $paramData['parameter_code'],
+            'user_gender' => $userGender,
+            'user_age' => $userAge,
+        ]);
+
+        return $this->selectFromDatabaseRanges($paramData['parameter_code'], $userGender, $userAge, $laboratoryId);
+    }
+
+    /**
+     * Select best reference from AI-extracted ranges
+     */
+    protected function selectFromAiRanges(array $ranges, ?string $userGender, ?int $userAge): array
+    {
+        // Score each range and pick the best match
+        $scoredRanges = collect($ranges)->map(function ($range) use ($userGender, $userAge) {
+            $score = 0;
+
+            // Gender match scoring
+            $rangeGender = $range['gender'] ?? 'both';
+            if ($rangeGender === 'both') {
+                $score += 1; // Lowest priority
+            } elseif ($rangeGender === $userGender) {
+                $score += 10; // Exact match
+            } else {
+                return null; // Wrong gender, skip this range
+            }
+
+            // Age match scoring
+            $ageMin = $range['age_min'] ?? null;
+            $ageMax = $range['age_max'] ?? null;
+
+            if ($ageMin === null && $ageMax === null) {
+                $score += 1; // Applies to all ages (lowest priority)
+            } elseif ($userAge !== null) {
+                // Check if user age is within range
+                $withinRange = true;
+                if ($ageMin !== null && $userAge < $ageMin) {
+                    $withinRange = false;
+                }
+                if ($ageMax !== null && $userAge > $ageMax) {
+                    $withinRange = false;
+                }
+
+                if ($withinRange) {
+                    $score += 10; // Exact age match
+                } else {
+                    return null; // Age doesn't match, skip
+                }
+            }
+
+            return ['range' => $range, 'score' => $score];
+        })->filter()->sortByDesc('score');
+
+        $bestMatch = $scoredRanges->first();
+
+        if ($bestMatch) {
+            $range = $bestMatch['range'];
+            $result = [
+                'reference_min' => $range['reference_min'] ?? null,
+                'reference_max' => $range['reference_max'] ?? null,
+                'reference_gender' => $range['gender'] ?? 'both',
+                'reference_age_min' => $range['age_min'] ?? null,
+                'reference_age_max' => $range['age_max'] ?? null,
+                'reference_condition' => $range['condition'] ?? null,
+                'reference_description' => $range['age_description'] ?? null,
+                'reference_categories' => $range['reference_categories'] ?? null,
+                'reference_type' => $range['reference_type'] ?? 'numeric',
+            ];
+
+            Log::info('Selected reference from AI', [
+                'score' => $bestMatch['score'],
+                'result' => $result,
+            ]);
+
+            return $result;
+        }
+
+        // No match found, return empty reference
+        Log::warning('No matching AI reference found', [
+            'user_gender' => $userGender,
+            'user_age' => $userAge,
+            'ranges_checked' => count($ranges),
+        ]);
+
+        return $this->emptyReference();
+    }
+
+    /**
+     * Select best reference from database
+     */
+    protected function selectFromDatabaseRanges(string $parameterCode, ?string $userGender, ?int $userAge, int $laboratoryId): array
+    {
+        $reference = StandardReferenceRange::forParameter($parameterCode)
+            ->forGender($userGender)
+            ->forAge($userAge)
+            ->forLaboratory($laboratoryId)
+            ->first();
+
+        if ($reference) {
+            return [
+                'reference_min' => $reference->reference_min,
+                'reference_max' => $reference->reference_max,
+                'reference_gender' => $reference->gender,
+                'reference_age_min' => $reference->age_min,
+                'reference_age_max' => $reference->age_max,
+                'reference_condition' => $reference->condition,
+                'reference_description' => $reference->description,
+                'reference_categories' => $reference->reference_categories, // Already an array due to cast
+                'reference_type' => $reference->reference_type,
+            ];
+        }
+
+        // No reference found in database either
+        Log::warning('No reference range found', [
+            'parameter_code' => $parameterCode,
+            'user_gender' => $userGender,
+            'user_age' => $userAge,
+        ]);
+
+        return $this->emptyReference();
+    }
+
+    /**
+     * Return empty reference structure
+     */
+    protected function emptyReference(): array
+    {
+        return [
+            'reference_min' => null,
+            'reference_max' => null,
+            'reference_gender' => null,
+            'reference_age_min' => null,
+            'reference_age_max' => null,
+            'reference_condition' => null,
+            'reference_description' => null,
+            'reference_categories' => null,
+            'reference_type' => 'numeric',
+        ];
     }
 
     protected function autoCreateExamType(string $code): ExamType
@@ -333,9 +593,19 @@ class ExamProcessingService
         return $parameter;
     }
 
-    protected function determineStatus($value, $min, $max): string
+    protected function determineStatus($value, $min, $max, string $referenceType = 'numeric', $categories = null): string
     {
-        if (!is_numeric($value) || $min === null || $max === null) {
+        if (!is_numeric($value)) {
+            return 'normal';
+        }
+
+        // Handle categorical references
+        if ($referenceType === 'categorical' && $categories !== null) {
+            return $this->determineCategoricalStatus($value, $categories);
+        }
+
+        // Handle numeric references
+        if ($min === null || $max === null) {
             return 'normal';
         }
 
@@ -347,6 +617,163 @@ class ExamProcessingService
             return 'high';
         }
 
+        return 'normal';
+    }
+
+    /**
+     * Find which category the value falls into
+     */
+    protected function findApplicableCategory($value, $categories): ?array
+    {
+        // Decode if it's a JSON string
+        if (is_string($categories)) {
+            $categories = json_decode($categories, true);
+        }
+
+        if (!is_array($categories) || empty($categories)) {
+            return null;
+        }
+
+        foreach ($categories as $category) {
+            $min = $category['min'] ?? null;
+            $max = $category['max'] ?? null;
+
+            // Normalize empty strings to null
+            if ($min === '' || $min === null) {
+                $min = null;
+            } else {
+                $min = is_numeric($min) ? (float) $min : null;
+            }
+
+            if ($max === '' || $max === null) {
+                $max = null;
+            } else {
+                $max = is_numeric($max) ? (float) $max : null;
+            }
+
+            // Check if value falls in this category
+            $inRange = true;
+            if ($min !== null && $value < $min) {
+                $inRange = false;
+            }
+            if ($max !== null && $value > $max) {
+                $inRange = false;
+            }
+
+            if ($inRange) {
+                // Return normalized category
+                return [
+                    'name' => $category['name'] ?? '',
+                    'min' => $min,
+                    'max' => $max,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalize categories: convert empty strings to null
+     */
+    protected function normalizeCategories($categories): ?array
+    {
+        if ($categories === null || !is_array($categories)) {
+            return null;
+        }
+
+        return array_map(function ($category) {
+            $min = $category['min'] ?? null;
+            $max = $category['max'] ?? null;
+
+            // Convert empty strings to null
+            if ($min === '' || !is_numeric($min)) {
+                $min = null;
+            } else {
+                $min = (float) $min;
+            }
+
+            if ($max === '' || !is_numeric($max)) {
+                $max = null;
+            } else {
+                $max = (float) $max;
+            }
+
+            return [
+                'name' => $category['name'] ?? '',
+                'min' => $min,
+                'max' => $max,
+            ];
+        }, $categories);
+    }
+
+    /**
+     * Determine status for categorical references
+     */
+    protected function determineCategoricalStatus($value, $categories): string
+    {
+        // Handle if it's still a JSON string (from old data)
+        if (is_string($categories)) {
+            $categories = json_decode($categories, true);
+        }
+
+        if (!is_array($categories) || empty($categories)) {
+            return 'normal';
+        }
+
+        // Map category names to status
+        // Categories like "Desejável", "Ótimo", "Normal", "Bom" -> normal
+        // Categories like "Alto", "Elevado", "Limítrofe" -> high
+        // Categories like "Baixo", "Inadequado" -> low
+
+        foreach ($categories as $category) {
+            $name = mb_strtolower($category['name'] ?? '');
+            $min = $category['min'] ?? null;
+            $max = $category['max'] ?? null;
+
+            // Normalize empty strings to null
+            if ($min === '' || !is_numeric($min)) {
+                $min = null;
+            } else {
+                $min = (float) $min;
+            }
+
+            if ($max === '' || !is_numeric($max)) {
+                $max = null;
+            } else {
+                $max = (float) $max;
+            }
+
+            // Check if value falls in this category
+            $inRange = true;
+            if ($min !== null && $value < $min) {
+                $inRange = false;
+            }
+            if ($max !== null && $value > $max) {
+                $inRange = false;
+            }
+
+            if ($inRange) {
+                // Determine status based on category name
+                if (in_array($name, ['desejável', 'ótimo', 'normal', 'bom', 'adequado', 'ideal', 'adequado população geral'])) {
+                    return 'normal';
+                }
+                if (in_array($name, ['alto', 'elevado', 'limítrofe', 'aumentado', 'muito alto', 'ideal (grupos de risco)'])) {
+                    return 'high';
+                }
+                if (in_array($name, ['baixo', 'diminuído', 'inadequado', 'muito baixo', 'deficiente'])) {
+                    return 'low';
+                }
+                if (in_array($name, ['crítico', 'risco', 'perigoso', 'risco de intoxicação'])) {
+                    return 'critical';
+                }
+
+                // Default to normal if name doesn't match known patterns
+                return 'normal';
+            }
+        }
+
+        // Value doesn't match any category
         return 'normal';
     }
 }

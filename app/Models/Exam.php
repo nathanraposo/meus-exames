@@ -24,6 +24,8 @@ class Exam extends Model
         'status',
         'notes',
         'file_path',
+        'pdf_text',
+        'ai_response',
         'requesting_doctor',
         'crm_doctor',
     ];
@@ -31,6 +33,7 @@ class Exam extends Model
     protected $casts = [
         'collection_date' => 'date',
         'result_date' => 'date',
+        'ai_response' => 'array',
     ];
 
     public function user(): BelongsTo

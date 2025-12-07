@@ -20,15 +20,42 @@ class ExamController extends Controller
         $this->examProcessor = $examProcessor;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $exams = Exam::with(['user', 'laboratory', 'examType'])
+        $query = Exam::with(['user', 'laboratory', 'examType'])
+            ->where('user_id', auth()->id());
+
+        // Filtro por laboratório
+        if ($request->filled('laboratory_id')) {
+            $query->where('laboratory_id', $request->laboratory_id);
+        }
+
+        // Filtro por data (de)
+        if ($request->filled('date_from')) {
+            $query->whereDate('collection_date', '>=', $request->date_from);
+        }
+
+        // Filtro por data (até)
+        if ($request->filled('date_to')) {
+            $query->whereDate('collection_date', '<=', $request->date_to);
+        }
+
+        $exams = $query->latest('collection_date')->get();
+
+        // Busca laboratórios que o usuário tem exames
+        $laboratories = Exam::select('laboratory_id')
             ->where('user_id', auth()->id())
-            ->latest('collection_date')
-            ->get();
+            ->with('laboratory:id,name')
+            ->get()
+            ->pluck('laboratory')
+            ->unique('id')
+            ->sortBy('name')
+            ->values();
 
         return Inertia::render('exams/index', [
             'exams' => $exams,
+            'laboratories' => $laboratories,
+            'filters' => $request->only(['laboratory_id', 'date_from', 'date_to']),
         ]);
     }
 
@@ -87,8 +114,15 @@ class ExamController extends Controller
             'laboratory_id' => 'required|exists:laboratories,id',
         ]);
 
+        // Carrega o novo laboratório
+        $newLaboratory = Laboratory::findOrFail($validated['laboratory_id']);
+
+        // Regenera o título do exame com o novo laboratório
+        $newTitle = $this->examProcessor->regenerateExamTitle($exam, $newLaboratory);
+
         $exam->update([
             'laboratory_id' => $validated['laboratory_id'],
+            'title' => $newTitle,
         ]);
 
         return back()->with('success', 'Laboratório atualizado com sucesso!');
@@ -126,6 +160,9 @@ class ExamController extends Controller
                     'status' => $result->status,
                     'reference_min' => $result->reference_min,
                     'reference_max' => $result->reference_max,
+                    'reference_type' => $result->reference_type,
+                    'reference_categories' => $result->reference_categories,
+                    'reference_description' => $result->reference_description,
                 ];
             });
 

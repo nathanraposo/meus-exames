@@ -20,6 +20,13 @@ return new class extends Migration
             $table->boolean('boolean_value')->nullable();
             $table->decimal('reference_min', 15, 4)->nullable();
             $table->decimal('reference_max', 15, 4)->nullable();
+            $table->string('reference_gender')->nullable();
+            $table->integer('reference_age_min')->nullable();
+            $table->integer('reference_age_max')->nullable();
+            $table->string('reference_condition')->nullable();
+            $table->text('reference_description')->nullable();
+            $table->json('reference_categories')->nullable();
+            $table->string('reference_type')->default('numeric');
             $table->enum('status', ['normal', 'low', 'high', 'critical'])->nullable();
             $table->text('observation')->nullable();
             $table->timestamps();

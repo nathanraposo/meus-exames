@@ -29,12 +29,25 @@ interface ExamParameter {
     unit: string;
 }
 
+interface ReferenceCategory {
+    name: string;
+    min: number | null;
+    max: number | null;
+}
+
 interface ExamResult {
     id: number;
     numeric_value: number | null;
     text_value: string | null;
     reference_min: number | null;
     reference_max: number | null;
+    reference_gender: string | null;
+    reference_age_min: number | null;
+    reference_age_max: number | null;
+    reference_condition: string | null;
+    reference_description: string | null;
+    reference_categories: ReferenceCategory[] | null;
+    reference_type: string;
     status: string;
     observation: string | null;
     exam_parameter: ExamParameter;
@@ -72,6 +85,9 @@ interface HistoryDataPoint {
     status: string;
     reference_min: number | null;
     reference_max: number | null;
+    reference_type: string;
+    reference_categories: ReferenceCategory[] | null;
+    reference_description: string | null;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -92,6 +108,56 @@ export default function ShowExam({ exam, laboratories }: Props) {
     const [isEditingLab, setIsEditingLab] = useState(false);
     const [selectedLabId, setSelectedLabId] = useState(exam.laboratory.id);
     const [isUpdatingLab, setIsUpdatingLab] = useState(false);
+
+    const formatReference = (result: ExamResult) => {
+        // Categórica
+        if (result.reference_type === 'categorical' && result.reference_categories) {
+            return (
+                <div className="space-y-1">
+                    {result.reference_categories.map((cat, index) => (
+                        <div key={index} className="text-xs">
+                            <span className="font-medium">{cat.name}:</span>{' '}
+                            {cat.min !== null && cat.max !== null
+                                ? `${cat.min} - ${cat.max}`
+                                : cat.min !== null
+                                  ? `≥ ${cat.min}`
+                                  : cat.max !== null
+                                    ? `< ${cat.max}`
+                                    : '-'}
+                        </div>
+                    ))}
+                    {result.reference_description && (
+                        <div className="text-xs italic text-muted-foreground">
+                            {result.reference_description}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Numérica
+        if (result.reference_min !== null || result.reference_max !== null) {
+            const refText =
+                result.reference_min !== null && result.reference_max !== null
+                    ? `${Number(result.reference_min).toFixed(2)} - ${Number(result.reference_max).toFixed(2)}`
+                    : result.reference_min !== null
+                      ? `≥ ${Number(result.reference_min).toFixed(2)}`
+                      : `< ${Number(result.reference_max).toFixed(2)}`;
+
+            return (
+                <div className="space-y-1">
+                    <div className="text-sm">{refText}</div>
+                    {result.reference_description && (
+                        <div className="text-xs italic text-muted-foreground">
+                            {result.reference_description}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        return <span className="text-muted-foreground">-</span>;
+    };
 
     const getStatusBadge = (status: string) => {
         const colors = {
@@ -350,9 +416,7 @@ export default function ShowExam({ exam, laboratories }: Props) {
                                                     {result.exam_parameter.unit}
                                                 </td>
                                                 <td className="p-4 text-sm text-muted-foreground">
-                                                    {result.reference_min !== null && result.reference_max !== null
-                                                        ? `${Number(result.reference_min).toFixed(2)} - ${Number(result.reference_max).toFixed(2)}`
-                                                        : '-'}
+                                                    {formatReference(result)}
                                                 </td>
                                                 <td className="p-4 text-sm">
                                                     <div className="flex items-center gap-2">

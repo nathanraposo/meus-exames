@@ -115,7 +115,7 @@ export default function Welcome({ canRegister }: Props) {
                                                     <MeusExamesLogo className="h-12 w-12" />
                                                     <div>
                                                         <h3 className="font-bold text-gray-900 dark:text-white">Hemograma Completo</h3>
-                                                        <p className="text-sm text-gray-600 dark:text-gray-400">LabMax - 01/12/2024</p>
+                                                        <p className="text-sm text-gray-600 dark:text-gray-400">Biofox - 01/12/2024</p>
                                                     </div>
                                                 </div>
 
